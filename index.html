@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Tracker - Eredmények</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #333333;
+            --input-bg: #2d2d2d;
+            --input-border: #444444;
+            --primary-btn: #3700b3;
+            --primary-btn-hover: #4f00e0;
+        }
+
+        body.light-mode {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --text-muted: #666666;
+            --border-color: #dddddd;
+            --input-bg: #ffffff;
+            --input-border: #cccccc;
+            --primary-btn: #3498db;
+            --primary-btn-hover: #2980b9;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h1, h2, h3 { color: var(--text-color); }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+        }
+
+        select, button {
+            padding: 8px 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+        }
+
+        button {
+            background-color: var(--primary-btn);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: var(--primary-btn-hover); }
+
+        .btn-theme { background-color: #03dac6; color: #000; font-weight: bold; }
+        .btn-theme:hover { background-color: #018786; color: #fff; }
+
+        .btn-switch { background-color: #03dac6; color: #000; font-size: 15px; padding: 10px 15px; font-weight: bold; }
+        .btn-switch:hover { background-color: #018786; color: #fff; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: var(--card-bg);
+            font-size: 13px;
+        }
+        th, td { border: 1px solid var(--border-color); padding: 8px; text-align: center; }
+        th { background-color: var(--input-bg); font-weight: bold; color: var(--text-color); }
+        th.player-col, td.player-col { text-align: left; font-size: 14px; }
+
+        .status-present { background-color: #1e4620; color: #b7e1cd; font-weight: bold; border-radius: 4px; padding: 4px; }
+        .status-megye2 { background-color: #0d3c61; color: #c2e0ff; font-weight: bold; border-radius: 4px; padding: 4px; }
+        .status-makeup { background-color: #5c4300; color: #ffe082; font-weight: bold; border-radius: 4px; padding: 4px; }
+        .status-run-ok { background-color: #333333; color: #e0e0e0; font-weight: bold; border-radius: 4px; padding: 4px; }
+        .status-run-fail { background-color: #5c1d24; color: #f8b4b8; font-weight: bold; border-radius: 4px; padding: 4px; }
+        .status-none { color: var(--text-muted); }
+
+        .player-item { border-bottom: 1px solid var(--border-color); padding: 15px 0; }
+
+        .month-picker-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--input-bg);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <h1>📊 Player Tracker - Eredmények</h1>
+        <button class="btn-theme" onclick="toggleTheme()" id="theme-btn">☀️ Világos mód</button>
+    </div>
+
+    <!-- NÉZETEK ÉS HÓNAPVÁLASZTÓ -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+            <h2>Játékosok adatai</h2>
+            
+            <!-- Hónapválasztó lenyíló lista -->
+            <div class="month-picker-container">
+                <label for="month-select" style="margin:0; font-weight: bold;">📅 Hónap:</label>
+                <select id="month-select" onchange="renderTableView()"></select>
+            </div>
+
+            <div>
+                <button class="btn-switch" onclick="toggleView()" id="view-toggle-btn">🪪 Váltás Kártya Nézetre</button>
+                <button onclick="loadPlayers()">🔄 Frissítés</button>
+            </div>
+        </div>
+
+        <div id="table-view" style="overflow-x: auto;">
+            <div id="matrix-table-container">Betöltés...</div>
+        </div>
+
+        <div id="cards-view" style="display: none;">
+            <div id="players-list">Betöltés...</div>
+        </div>
+    </div>
+
+    <script>
+        // Írd át a Cloudflare Worker-ed éles URL címére!
+        const API_URL = "https://player-database-api.tamorsz95.workers.dev";
+
+        let cachedPlayers = [];
+        let currentView = "table";
+
+        const monthNames = [
+            "január", "február", "március", "április", "május", "június",
+            "július", "augusztus", "szeptember", "október", "november", "december"
+        ];
+
+        window.onload = loadPlayers;
+
+        function toggleTheme() {
+            document.body.classList.toggle("light-mode");
+            const btn = document.getElementById("theme-btn");
+            if (document.body.classList.contains("light-mode")) {
+                btn.textContent = "🌙 Sötét mód";
+            } else {
+                btn.textContent = "☀️ Világos mód";
+            }
+        }
+
+        function toggleView() {
+            const cardsView = document.getElementById("cards-view");
+            const tableView = document.getElementById("table-view");
+            const btn = document.getElementById("view-toggle-btn");
+
+            if (currentView === "table") {
+                currentView = "cards";
+                cardsView.style.display = "block";
+                tableView.style.display = "none";
+                btn.textContent = "📋 Váltás Táblázat Nézetre";
+            } else {
+                currentView = "table";
+                cardsView.style.display = "none";
+                tableView.style.display = "block";
+                btn.textContent = "🪪 Váltás Kártya Nézetre";
+            }
+            renderViews();
+        }
+
+        async function loadPlayers() {
+            try {
+                const response = await fetch(`${API_URL}/players`);
+                cachedPlayers = await response.json();
+
+                updateMonthDropdown();
+                renderViews();
+            } catch (error) {
+                console.error("Hiba a betöltéskor:", error);
+                document.getElementById("matrix-table-container").innerHTML = "<p style='color:#cf6679;'>Nem sikerült kapcsolódni az API-hoz!</p>";
+            }
+        }
+
+        function updateMonthDropdown() {
+            const monthSelect = document.getElementById("month-select");
+            const previousSelectedValue = monthSelect.value;
+            
+            monthSelect.innerHTML = "";
+
+            const activeMonthsSet = new Set();
+
+            cachedPlayers.forEach(player => {
+                player.trainings.forEach(t => {
+                    if (t.date) activeMonthsSet.add(t.date.substring(0, 7));
+                });
+                player.runs.forEach(r => {
+                    if (r.date) activeMonthsSet.add(r.date.substring(0, 7));
+                });
+            });
+
+            const sortedMonths = Array.from(activeMonthsSet).sort().reverse();
+
+            if (sortedMonths.length === 0) {
+                const opt = document.createElement("option");
+                opt.value = "";
+                opt.textContent = "Nincs rögzített hónap";
+                monthSelect.appendChild(opt);
+                return;
+            }
+
+            const now = new Date();
+            const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+            sortedMonths.forEach(ym => {
+                const [year, monthStr] = ym.split("-");
+                const monthIndex = parseInt(monthStr, 10) - 1;
+                const monthText = `${year}. ${monthNames[monthIndex]}`;
+
+                const option = document.createElement("option");
+                option.value = ym;
+                option.textContent = monthText;
+
+                monthSelect.appendChild(option);
+            });
+
+            if (previousSelectedValue && sortedMonths.includes(previousSelectedValue)) {
+                monthSelect.value = previousSelectedValue;
+            } else if (sortedMonths.includes(currentYM)) {
+                monthSelect.value = currentYM;
+            } else {
+                monthSelect.value = sortedMonths[0];
+            }
+        }
+
+        function renderViews() {
+            renderCardsView();
+            renderTableView();
+        }
+
+        function renderCardsView() {
+            const listContainer = document.getElementById("players-list");
+            listContainer.innerHTML = "";
+
+            if (cachedPlayers.length === 0) {
+                listContainer.innerHTML = "<p>Nincs elérhető adat.</p>";
+                return;
+            }
+
+            cachedPlayers.forEach(player => {
+                const totalKm = player.runs.reduce((sum, run) => sum + run.distance_km, 0);
+
+                const playerDiv = document.createElement("div");
+                playerDiv.className = "player-item";
+                playerDiv.innerHTML = `
+                    <h3>${player.name}</h3>
+                    <p>
+                        <strong>Edzések száma:</strong> ${player.trainings.length} alkalom | 
+                        <strong>Összes futás:</strong> ${totalKm.toFixed(1)} km (${player.runs.length} alkalom)
+                    </p>
+                `;
+                listContainer.appendChild(playerDiv);
+            });
+        }
+
+        function renderTableView() {
+            const container = document.getElementById("matrix-table-container");
+            const monthSelect = document.getElementById("month-select");
+            const selectedMonth = monthSelect.value;
+            const selectedMonthText = monthSelect.options[monthSelect.selectedIndex]?.text || selectedMonth;
+
+            if (cachedPlayers.length === 0) {
+                container.innerHTML = "<p>Nincs rögzített játékos az adatbázisban.</p>";
+                return;
+            }
+
+            if (!selectedMonth) {
+                container.innerHTML = "<p>Nincs rögzített edzés vagy futási adat egyetlen hónapban sem.</p>";
+                return;
+            }
+
+            const eventsMap = {};
+
+            cachedPlayers.forEach(player => {
+                player.trainings.forEach(t => {
+                    const ym = t.date.substring(0, 7);
+                    if (ym === selectedMonth) {
+                        const shortDate = t.date.split("T")[0].replace(/-/g, ".");
+                        const key = `${shortDate}_TRAINING`;
+                        if (!eventsMap[key]) {
+                            eventsMap[key] = { date: shortDate, type: "Edzés" };
+                        }
+                    }
+                });
+
+                player.runs.forEach(r => {
+                    const ym = r.date.substring(0, 7);
+                    if (ym === selectedMonth) {
+                        const shortDate = r.date.split("T")[0].replace(/-/g, ".");
+                        const key = `${shortDate}_RUN_${r.distance_km}`;
+                        if (!eventsMap[key]) {
+                            eventsMap[key] = { date: shortDate, type: "Futás", distance: r.distance_km };
+                        }
+                    }
+                });
+            });
+
+            const sortedEvents = Object.keys(eventsMap).sort().map(k => eventsMap[k]);
+
+            if (sortedEvents.length === 0) {
+                container.innerHTML = `<p>A kiválasztott időszakban (<strong>${selectedMonthText}</strong>) nem található rögzített edzés vagy futás.</p>`;
+                return;
+            }
+
+            let tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="player-col">Játékos neve</th>
+                            ${sortedEvents.map(e => `
+                                <th>
+                                    ${e.date}<br>
+                                    <small style="color:var(--text-muted);">${e.type === "Futás" ? `🏃 Futás (${e.distance} km)` : "🏋️ Edzés"}</small>
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            cachedPlayers.forEach(player => {
+                tableHTML += `<tr><td class="player-col"><strong>${player.name}</strong></td>`;
+
+                sortedEvents.forEach(e => {
+                    if (e.type === "Edzés") {
+                        const training = player.trainings.find(t => t.date.split("T")[0].replace(/-/g, ".") === e.date);
+                        if (training) {
+                            let cssClass = "status-present";
+                            if (training.status === "Megye 2-ben edzett") cssClass = "status-megye2";
+                            if (training.status === "Pótolt") cssClass = "status-makeup";
+                            
+                            tableHTML += `<td><span class="${cssClass}">${training.status}</span></td>`;
+                        } else {
+                            tableHTML += `<td><span class="status-none">-</span></td>`;
+                        }
+                    } else if (e.type === "Futás") {
+                        const run = player.runs.find(r => r.date.split("T")[0].replace(/-/g, ".") === e.date && r.distance_km === e.distance);
+                        if (run) {
+                            const cssClass = run.target_completed ? "status-run-ok" : "status-run-fail";
+                            const text = run.target_completed ? "✓ Teljesítve" : "✗ Nem teljesült";
+                            tableHTML += `<td><span class="${cssClass}">${text}</span></td>`;
+                        } else {
+                            tableHTML += `<td><span class="status-none">-</span></td>`;
+                        }
+                    }
+                });
+
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `</tbody></table>`;
+            container.innerHTML = tableHTML;
+        }
+    </script>
+</body>
+</html>
